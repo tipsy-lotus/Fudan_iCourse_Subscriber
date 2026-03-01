@@ -90,7 +90,7 @@ def login_with_retry(max_attempts: int = 5) -> WebVPNSession:
             return vpn
         except Exception as e:
             if attempt < max_attempts - 1:
-                print(f"  Failed: {e}, retrying...")
+                print(f"  Failed: {type(e).__name__}, retrying...")
                 time.sleep(3)
             else:
                 raise

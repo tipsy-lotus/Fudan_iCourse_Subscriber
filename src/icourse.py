@@ -242,7 +242,7 @@ class ICourseClient:
         try:
             info = self.get_sub_info(course_id, sub_id)
         except Exception as e:
-            print(f"    Failed to get sub info: {e}")
+            print(f"    Failed to get sub info for {sub_id}")
             return None
 
         # Get server timestamp for signing

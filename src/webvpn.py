@@ -224,12 +224,11 @@ class WebVPNSession:
                     break
         if not lck:
             raise RuntimeError(
-                f"Failed to extract lck from CAS redirect chain. "
-                f"Status: {resp.status_code}, URL: {resp.url[:200]}"
+                f"Failed to extract lck from CAS redirect chain (status={resp.status_code})"
             )
 
         entity_id = config.ICOURSE_BASE
-        print(f"    lck: {lck[:20]}...")
+        print("    lck: OK")
 
         # Step 2: Query auth methods (through WebVPN)
         print("[2/7] Querying auth methods (via WebVPN)...")
@@ -254,10 +253,8 @@ class WebVPNSession:
                 auth_chain_code = method.get("authChainCode", "")
                 break
         if not auth_chain_code:
-            raise RuntimeError(
-                f"No authChainCode found. Response: {data}"
-            )
-        print(f"    authChainCode: {auth_chain_code[:20]}...")
+            raise RuntimeError("No authChainCode found in response")
+        print("    authChainCode: OK")
 
         # Step 3: Get RSA public key (through WebVPN)
         print("[3/7] Getting RSA public key (via WebVPN)...")
@@ -270,10 +267,8 @@ class WebVPNSession:
         data = resp.json()
         pub_key_b64 = data.get("data", "")
         if not pub_key_b64:
-            raise RuntimeError(
-                f"Failed to get public key via WebVPN. Response: {data}"
-            )
-        print(f"    Got RSA public key ({len(pub_key_b64)} chars)")
+            raise RuntimeError("Failed to get public key via WebVPN")
+        print("    Got RSA public key")
 
         # Step 4: Encrypt password
         print("[4/7] Encrypting password...")
@@ -308,15 +303,13 @@ class WebVPNSession:
 
         if str(data.get("code")) != "200":
             raise RuntimeError(
-                f"iCourse CAS auth failed: {data.get('message', data)}"
+                f"iCourse CAS auth failed (code={data.get('code')})"
             )
 
         login_token = data.get("loginToken", "")
         if not login_token:
-            raise RuntimeError(
-                f"No loginToken in iCourse CAS response: {data}"
-            )
-        print(f"    loginToken: {login_token[:30]}...")
+            raise RuntimeError("No loginToken in iCourse CAS response")
+        print("    loginToken: OK")
 
         # Step 6: Get CAS ticket (through WebVPN)
         print("[6/7] Getting CAS ticket (via WebVPN)...")
@@ -343,23 +336,20 @@ class WebVPNSession:
             )
         if not ticket_match:
             raise RuntimeError(
-                f"Failed to extract iCourse ticket URL. "
-                f"Response length: {len(html)}, preview: {html[:500]}"
+                f"Failed to extract iCourse ticket URL (response length: {len(html)})"
             )
 
         ticket_url = html_mod.unescape(ticket_match.group(1))
-        print(f"    ticket URL: {ticket_url[:80]}...")
+        print("    Ticket extracted.")
 
         # Step 7: Follow ticket to iCourse (through WebVPN)
         print("[7/7] Following ticket to iCourse (via WebVPN)...")
         if not ticket_url.startswith(config.WEBVPN_BASE):
             ticket_url = get_vpn_url(ticket_url)
-            print(f"    Converted to VPN URL: {ticket_url[:80]}...")
 
         resp = self.session.get(
             ticket_url, allow_redirects=True, timeout=90
         )
-        print(f"    Final URL: {resp.url[:80]}...")
         print(f"    Status: {resp.status_code}")
 
         # Verify by making a test API call
@@ -371,9 +361,7 @@ class WebVPNSession:
             try:
                 user_data = resp.json()
                 if user_data.get("code") in (0, 200):
-                    params = user_data.get("params") or user_data.get("data", {})
-                    realname = params.get("realname", "Unknown")
-                    print(f"    Verified: logged in as {realname}")
+                    print("    Verified: login OK")
                     print("[*] iCourse authentication successful!")
                     return True
             except Exception:
@@ -428,13 +416,12 @@ class WebVPNSession:
         lck_match = re.search(r"[?&]lck=([^&]+)", location)
         if not lck_match:
             raise RuntimeError(
-                f"Failed to extract lck from redirect. "
-                f"Status: {resp.status_code}, Location: {location}"
+                f"Failed to extract lck from redirect (status={resp.status_code})"
             )
 
         lck = lck_match.group(1)
         entity_id = config.WEBVPN_BASE
-        print(f"    lck: {lck[:20]}...")
+        print("    lck: OK")
         return lck, entity_id
 
     def _query_auth_methods(
@@ -467,11 +454,9 @@ class WebVPNSession:
                 break
 
         if not auth_chain_code:
-            raise RuntimeError(
-                f"Failed to get authChainCode. Response: {data}"
-            )
+            raise RuntimeError("Failed to get authChainCode")
 
-        print(f"    authChainCode: {auth_chain_code[:20]}...")
+        print("    authChainCode: OK")
         return auth_chain_code, request_type
 
     def _get_public_key(self) -> str:
@@ -487,9 +472,9 @@ class WebVPNSession:
         data = resp.json()
         pub_key_b64 = data.get("data", "")
         if not pub_key_b64:
-            raise RuntimeError(f"Failed to get public key. Response: {data}")
+            raise RuntimeError("Failed to get public key")
 
-        print(f"    Got RSA public key ({len(pub_key_b64)} chars)")
+        print("    Got RSA public key")
         return pub_key_b64
 
     def _encrypt_password(self, password: str, pub_key_b64: str) -> str:
@@ -542,15 +527,15 @@ class WebVPNSession:
 
         if str(data.get("code")) != "200":
             raise RuntimeError(
-                f"Authentication failed: {data.get('message', data)}"
+                f"Authentication failed (code={data.get('code')})"
             )
 
         # loginToken is at top level, not nested under "data"
         login_token = data.get("loginToken", "")
         if not login_token:
-            raise RuntimeError(f"No loginToken in response: {data}")
+            raise RuntimeError("No loginToken in response")
 
-        print(f"    loginToken: {login_token[:30]}...")
+        print("    loginToken: OK")
         return login_token
 
     def _get_cas_ticket(self, login_token: str) -> str:
@@ -581,14 +566,13 @@ class WebVPNSession:
 
         if not ticket_match:
             raise RuntimeError(
-                f"Failed to extract ticket URL from authnEngine response. "
-                f"Response length: {len(html)}, preview: {html[:500]}"
+                f"Failed to extract ticket URL (response length: {len(html)})"
             )
 
         ticket_url = ticket_match.group(1)
         # Unescape HTML entities (e.g., &amp; -> &)
         ticket_url = html_mod.unescape(ticket_url)
-        print(f"    ticket URL: {ticket_url[:60]}...")
+        print("    Ticket extracted.")
         return ticket_url
 
     def _establish_session(self, ticket_url: str):
@@ -603,11 +587,10 @@ class WebVPNSession:
                     ticket_url, allow_redirects=True, timeout=90
                 )
                 if resp.status_code == 200:
-                    print(f"    Final URL: {resp.url}")
+                    print("    Session established.")
                     return
                 raise RuntimeError(
-                    f"Failed to establish WebVPN session. "
-                    f"Status: {resp.status_code}, URL: {resp.url}"
+                    f"Failed to establish WebVPN session (status={resp.status_code})"
                 )
             except requests.exceptions.Timeout:
                 # Check if session was established despite timeout
