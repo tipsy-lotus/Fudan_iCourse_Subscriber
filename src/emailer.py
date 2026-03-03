@@ -1,8 +1,9 @@
-"""Email notification via QQ SMTP."""
-
 import re
 import smtplib
 import time
+import requests
+from io import BytesIO
+from PIL import Image
 from collections import OrderedDict
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -92,14 +93,35 @@ ul, ol { padding-left: 24px; }
 li { margin-bottom: 4px; }
 """
 
+_IMAGE_CACHE = {}
 
+def _get_image_dimensions(url: str, dpi: int = 300) -> tuple:
+    """获取并计算适配 300 DPI 的逻辑宽高"""
+    if url in _IMAGE_CACHE:
+        return _IMAGE_CACHE[url]
+        
+    try:
+        # 300 DPI 是标准网页 96 DPI 的 3.125 倍
+        scale_factor = dpi / 96.0
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        
+        img = Image.open(BytesIO(response.content))
+        # 计算逻辑宽高，最小为 1px
+        logical_width = max(1, int(img.width / scale_factor))
+        logical_height = max(1, int(img.height / scale_factor))
+        
+        _IMAGE_CACHE[url] = (logical_width, logical_height)
+        return logical_width, logical_height
+    except Exception as e:
+        print(f"[LaTeX Render] 获取图片尺寸失败 {url}: {e}")
+        return None, None
 def _md_to_html(md_text: str) -> str:
     """Convert Markdown to styled HTML, rendering LaTeX math as images.
 
     Processing order: extract LaTeX → markdown convert → restore as <img>.
     This prevents the markdown engine from corrupting backslash escapes in LaTeX.
     """
-    # Step 1: Extract LaTeX expressions and replace with placeholders
     latex_map = {}
     counter = 0
 
@@ -110,32 +132,55 @@ def _md_to_html(md_text: str) -> str:
         latex_map[key] = match.group(0)
         return key
 
-    # Extract $$...$$ (block) before $...$ (inline) to avoid conflicts
     text = re.sub(r"\$\$(.+?)\$\$", _stash, md_text, flags=re.DOTALL)
     text = re.sub(r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)", _stash, text)
 
-    # Step 2: Convert markdown (LaTeX is safely stashed away)
     html = markdown.markdown(text, extensions=_MD_EXTENSIONS)
 
-    # Step 3: Replace placeholders with rendered <img> tags (PNG for email compat)
     for key, original in latex_map.items():
         if original.startswith("$$"):
+            # 块级公式处理
             latex_content = original[2:-2]
-            img = (
-                f'<div style="text-align:center;margin:12px 0">'
-                f'<img src="https://latex.codecogs.com/png.latex?\\dpi{{300}}%20{quote(latex_content)}"'
-                f' alt="{escape(latex_content)}" style="vertical-align:middle"></div>'
-            )
+            # 注意：如果背景是纯白，可以加上 \bg{white} 参数以适配深色模式
+            url = f"https://latex.codecogs.com/png.latex?\\dpi{{300}}\\bg{{white}}%20{quote(latex_content)}"
+            w, h = _get_image_dimensions(url)
+            
+            if w and h:
+                # 完美方案：写死 width 和 height
+                img = (
+                    f'<div style="text-align:center;margin:16px 0">'
+                    f'<img src="{url}" alt="{escape(latex_content)}" '
+                    f'width="{w}" height="{h}" style="vertical-align:middle; border:none; display:inline-block;"></div>'
+                )
+            else:
+                # 降级方案：网络失败时依靠 CSS 限制
+                img = (
+                    f'<div style="text-align:center;margin:16px 0">'
+                    f'<img src="{url}" alt="{escape(latex_content)}" '
+                    f'style="vertical-align:middle; max-width:100%; height:auto;"></div>'
+                )
         else:
+            # 行内公式处理
             latex_content = original[1:-1]
-            img = (
-                f'<img src="https://latex.codecogs.com/png.latex?\\dpi{{300}}\\inline%20{quote(latex_content)}"'
-                f' alt="{escape(latex_content)}" style="vertical-align:middle">'
-            )
+            url = f"https://latex.codecogs.com/png.latex?\\dpi{{300}}\\bg{{white}}\\inline%20{quote(latex_content)}"
+            w, h = _get_image_dimensions(url)
+            
+            if w and h:
+                # 完美方案：写死 width 和 height，并使用 vertical-align 微调对齐基线
+                img = (
+                    f'<img src="{url}" alt="{escape(latex_content)}" '
+                    f'width="{w}" height="{h}" style="vertical-align:-0.2em; border:none; margin:0 2px;">'
+                )
+            else:
+                # 降级方案
+                img = (
+                    f'<img src="{url}" alt="{escape(latex_content)}" '
+                    f'style="vertical-align:middle; height:1.3em; border:none; margin:0 2px;">'
+                )
+                
         html = html.replace(key, img)
 
     return html
-
 
 class Emailer:
     """Send course summary emails via QQ SMTP SSL."""
