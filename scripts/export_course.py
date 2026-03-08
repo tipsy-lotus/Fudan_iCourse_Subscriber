@@ -42,7 +42,7 @@ from src.emailer import _EMAIL_CSS, _PYGMENTS_CSS, _md_to_html  # noqa: E402
 # size them naturally based on the image's intrinsic dimensions instead.
 _PDF_LATEX_CSS = (
     "img { max-width: 100% !important; height: auto !important; }\n"
-    'body { font-family: "SimSun", "Noto Serif CJK SC", "AR PL SungtiL GB", serif; }'
+    ' { font-family: "AR PL UMing CN", serif; }'
 )
 
 
@@ -66,17 +66,17 @@ def _build_html(course_title: str, teacher: str, lectures: list[dict],
             f"<h2>{escape(lec['sub_title'])} "
             f"<small>({escape(lec['date'])})</small></h2>"
         )
-        body_parts.append(_md_to_html(lec["summary"], cid_images=cid_images))
-        body_parts.append("<hr>")
+        _parts.append(_md_to_html(lec["summary"], cid_images=cid_images))
+        _parts.append("<hr>")
 
     extra_css = f"\n{_PDF_LATEX_CSS}" if pdf else ""
     return (
         "<!DOCTYPE html>"
         "<html><head><meta charset='utf-8'>"
         f"<style>{_EMAIL_CSS}\n{_PYGMENTS_CSS}{extra_css}</style>"
-        "</head><body>"
-        + "\n".join(body_parts)
-        + "</body></html>"
+        "</head><>"
+        + "\n".join(_parts)
+        + "</></html>"
     )
 
 
