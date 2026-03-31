@@ -34,6 +34,11 @@ jobs:
         if: steps.cache-pip.outputs.cache-hit != 'true'
         run: pip install -r requirements.txt
 
+      - name: Clean apt cache
+        run: |
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
       - name: Update apt
         run: |
           sudo apt-get update
