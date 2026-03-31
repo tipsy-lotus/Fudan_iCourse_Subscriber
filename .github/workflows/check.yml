@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 360
 
     steps:
@@ -34,8 +34,16 @@ jobs:
         if: steps.cache-pip.outputs.cache-hit != 'true'
         run: pip install -r requirements.txt
 
+      - name: Update apt
+        run: |
+          sudo apt-get update
+
       - name: Install ffmpeg
         run: sudo apt-get install -y ffmpeg
+        
+      - name: Check ffmpeg
+        run: |
+          ffmpeg -version
 
       - name: Cache ASR models
         id: cache-models
